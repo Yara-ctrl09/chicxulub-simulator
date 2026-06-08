@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>칙술루브 충돌 시뮬레이터 - 결과 페이지</title>
+    
+    <!-- Bootstrap CDN for responsive design -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js CDN for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <style>
+        /* ========== 다크 모드 기본 스타일 ========== */
+        body {
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #e0e6ff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container-main {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ========== 헤더 스타일 ========== */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeIn 0.8s ease-in;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00d4ff, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #a0adc7;
+            font-size: 1.1rem;
+        }
+
+        /* ========== 카드 스타일 ========== */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .card-title {
+            color: #00d4ff;
+            font-weight: bold;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        /* ========== 캔버스 애니메이션 ========== */
+        #impactCanvas {
+            width: 100%;
+            height: 400px;
+            background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        /* ========== 결과 박스 스타일 ========== */
+        .result-box {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 4px solid #00d4ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            animation: fadeIn 0.6s ease-in;
+        }
+
+        .result-label {
+            color: #a0adc7;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .result-value {
+            color: #00d4ff;
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        /* ========== 차트 컨테이너 ========== */
+        .chart-container {
+            position: relative;
+            height: 350px;
+            margin-bottom: 30px;
+        }
+
+        /* ========== 경고 메시지 스타일 ========== */
+        .alert-extinction {
+            background: rgba(255, 107, 53, 0.2);
+            border-left: 4px solid #ff6b35;
+            color: #ff9966;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        /* ========== 버튼 스타일 ========== */
+        .btn-home {
+            background: linear-gradient(45deg, #0099ff, #00d4ff);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+        }
+
+        .btn-home:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.4);
+            color: white;
+        }
+
+        /* ========== 애니메이션 ========== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-item {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        /* ========== 로딩 상태 ========== */
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 400px;
+            font-size: 1.5rem;
+            color: #00d4ff;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 212, 255, 0.3);
+            border-top: 4px solid #00d4ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* ========== 반응형 레이아웃 ========== */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <!-- ========== 헤더 섹션 ========== -->
+        <div class="header">
+            <h1>📊 칙술루브 충돌 분석</h1>
+            <p>Chicxulub Impact Analysis & Results</p>
+        </div>
+
+        <div class="row">
+            <!-- ========== 왼쪽: 결과값 섹션 ========== -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <h3 class="card-title">⚙️ 입력 파라미터</h3>
+                    
+                    <div class="result-box">
+                        <div class="result-label">소행성 직경</div>
+                        <div class="result-value" id="paramDiameter">-</div>
+                    </div>
+
+                    <div class="result-box">
+                        <div class="result-label">충돌 속도</div>
+                        <div class="result-value" id="paramVelocity">-</div>
+                    </div>
+
+                    <div class="result-box">
+                        <div class="result-label">충돌 각도</div>
+                        <div class="result-value" id="paramAngle">-</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">📈 계산 결과</h3>
+                    
+                    <div class="result-box">
+                        <div class="result-label">충돌 에너지</div>
+                        <div class="result-value" id="energyDisplay">-</div>
+                    </div>
+
+                    <div class="result-box">
+                        <div class="result-label">크레이터 직경</div>
+                        <div class="result-value" id="craterDisplay">-</div>
+                    </div>
+
+                    <div class="result-box">
+                        <div class="result-label">지진 규모</div>
+                        <div class="result-value" id="magnitudeDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== 오른쪽: 애니메이션 및 결과 섹션 ========== -->
+            <div class="col-lg-8">
+                <!-- 충돌 애니메이션 캔버스 -->
+                <div class="card">
+                    <h3 class="card-title">🌏 충돌 시뮬레이션 애니메이션</h3>
+                    <div id="canvasContainer" class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>애니메이션 로딩 중...</span>
+                    </div>
+                    <canvas id="impactCanvas" style="display: none;"></canvas>
+                </div>
+
+                <!-- 상세 결과 리포트 -->
+                <div class="card" id="resultsCard">
+                    <h3 class="card-title">📋 상세 분석 리포트</h3>
+                    
+                    <div class="result-item">
+                        <div class="result-box">
+                            <div class="result-label">충돌 후 초기 지진</div>
+                            <div class="result-value" id="reportMagnitude">-</div>
+                            <p style="color: #888; font-size: 0.9rem; margin-top: 5px;">
+                                <span id="reportDescription">계산 중...</span>
+                            </p>
+                        </div>
+
+                        <div class="result-box">
+                            <div class="result-label">대기권 진입 온도</div>
+                            <div class="result-value" id="reportTemp">-</div>
+                            <p style="color: #888; font-size: 0.9rem; margin-top: 5px;">
+                                운석은 대기권 진입 시 극도의 열을 발생시킵니다.
+                            </p>
+                        </div>
+
+                        <div id="extinctionWarning"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 그래프 섹션 ========== -->
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card">
+                    <h3 class="card-title">🌡️ 지구 평균 기온 변화</h3>
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 15px;">
+                        충돌 후 3년간 기온 변화 추이 (Impact Winter)
+                    </p>
+                    <div class="chart-container">
+                        <canvas id="temperatureChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card">
+                    <h3 class="card-title">🦕 생물 종 생존율 변화</h3>
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 15px;">
+                        충돌 후 먹이사슬 붕괴로 인한 생존율 추이
+                    </p>
+                    <div class="chart-container">
+                        <canvas id="survivalChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 정보 및 네비게이션 섹션 ========== -->
+        <div class="card">
+            <h3 class="card-title">ℹ️ 시뮬레이션 설명</h3>
+            <div style="color: #a0adc7; line-height: 1.8;">
+                <p>
+                    <strong>📍 충돌 에너지 (TNT 메가톤):</strong><br>
+                    물리 공식 E = ½mv² 를 사용하여 계산됩니다.
+                    소행성의 부피(반지름 기반)와 밀도(3000 kg/m³)를 곱해 질량을 구하고,
+                    속도를 고려하여 운동에너지를 계산합니다.
+                </p>
+                <p>
+                    <strong>🌍 크레이터 형성:</strong><br>
+                    충돌 에너지에 비례하며, 충돌 각도가 수평(90°)에 가까울수록 더 큰 크레이터가 형성됩니다.
+                    측면 충돌(30°)은 에너지가 분산되어 작은 크레이터가 생깁니다.
+                </p>
+                <p>
+                    <strong>🌡️ 충격 겨울 (Impact Winter):</strong><br>
+                    충돌로 인해 발생한 먼지, 화산재, 황산염 에어로졸이 대기권을 덮으면서
+                    태양빛이 차단되어 지구 전체의 기온이 급격히 하강합니다.
+                    이로 인해 광합성이 불가능해지고 먹이사슬이 붕괴되어 대멸종이 발생합니다.
+                </p>
+                <p>
+                    <strong>🦕 생태계 붕괴:</strong><br>
+                    1단계: 식물(광합성 불가) → 2단계: 초식동물(먹이 부족) → 3단계: 육식동물(사냥감 부족)
+                    순서로 생존율이 급격히 감소합니다. 약 6천 5백만 년 전의 실제 사건으로
+                    지구 생물의 75% 이상이 멸종했습니다.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="index.html" class="btn-home">← 처음으로 돌아가기 (Back to Menu)</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== JavaScript 로직 ========== -->
+    <script>
+        // ========== 전역 변수 선언 ==========
+        let temperatureChart = null;
+        let survivalChart = null;
+        let asteroidData = null;
+
+        // ========== 함수: 페이지 로드 시 실행 ==========
+        /*
+         * 이 함수는 페이지가 로드될 때 자동으로 실행됩니다.
+         * localStorage에서 데이터를 읽어 화면에 표시하고 계산을 수행합니다.
+         */
+        function initializeResultsPage() {
+            console.log('📄 result.html 페이지 로드됨');
+
+            // 1. localStorage에서 데이터 읽기
+            const savedData = localStorage.getItem('asteroidData');
+
+            // 2. 데이터 검증
+            if (!savedData) {
+                console.error('❌ localStorage에서 데이터를 찾을 수 없습니다!');
+                document.getElementById('canvasContainer').innerHTML = `
+                    <div style="color: #ff6b35; font-size: 1.1rem;">
+                        <p>오류: 입력 데이터가 없습니다.</p>
+                        <p><a href="index.html" style="color: #00d4ff;">메인 페이지로 돌아가기</a></p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 3. JSON 문자열을 객체로 변환
+            try {
+                asteroidData = JSON.parse(savedData);
+            } catch (e) {
+                console.error('❌ 데이터 파싱 오류:', e);
+                return;
+            }
+
+            console.log('✅ localStorage에서 데이터 읽음:', asteroidData);
+
+            // 4. 파라미터 표시
+            document.getElementById('paramDiameter').textContent = asteroidData.diameter.toFixed(1) + ' km';
+            document.getElementById('paramVelocity').textContent = asteroidData.velocity.toFixed(1) + ' km/s';
+            document.getElementById('paramAngle').textContent = asteroidData.angle.toFixed(0) + '°';
+
+            // 5. 물리 계산 수행
+            const energy = calculateImpactEnergy(asteroidData.diameter, asteroidData.velocity);
+            const crater = calculateCraterDiameter(energy, asteroidData.angle);
+            const magnitude = calculateEarthquakeMagnitude(energy);
+
+            // 6. 계산 결과 표시
+            document.getElementById('energyDisplay').textContent = energy.toFixed(1) + ' Mt';
+            document.getElementById('craterDisplay').textContent = crater.toFixed(0) + ' km';
+            document.getElementById('magnitudeDisplay').textContent = magnitude.toFixed(1);
+
+            // 7. 상세 리포트 생성
+            generateReport(energy, crater, magnitude, asteroidData.diameter, asteroidData.velocity);
+
+            // 8. 캔버스 애니메이션 시작
+            setTimeout(() => {
+                animateImpact(asteroidData.diameter, asteroidData.velocity, asteroidData.angle);
+                createTemperatureChart(energy);
+                createSurvivalChart(energy);
+            }, 500);
+        }
+
+        // ========== 함수: 충돌 에너지 계산 ==========
+        /*
+         * 공식: E = (1/2) × m × v²
+         * 
+         * 단계별 계산:
+         * 1. 소행성의 반지름 계산 (직경 → 반지름)
+         * 2. 구의 부피 공식 사용: V = (4/3) × π × r³
+         * 3. 질량 계산: m = 부피 × 밀도
+         * 4. 운동에너지 계산: E = (1/2) × m × v²
+         * 5. 에너지를 TNT 메가톤(Mt) 단위로 변환
+         */
+        function calculateImpactEnergy(diameterKm, velocityKms) {
+            // 단위 변환: km → m, km/s → m/s
+            const diameterM = diameterKm * 1000;
+            const radiusM = diameterM / 2;
+            const velocityMs = velocityKms * 1000;
+            const densityAsteroid = 3000;  // kg/m³
+
+            // 구의 부피: V = (4/3) × π × r³
+            const volumeM3 = (4/3) * Math.PI * Math.pow(radiusM, 3);
+
+            // 질량: m = V × ρ
+            const massKg = volumeM3 * densityAsteroid;
+
+            // 운동에너지: E = (1/2) × m × v²
+            const energyJoules = 0.5 * massKg * Math.pow(velocityMs, 2);
+
+            // 에너지 변환: 1 Mt TNT = 4.184 × 10^15 J
+            const energyMt = energyJoules / (4.184e15);
+
+            console.log('⚡ 충돌 에너지 계산:', {
+                diameter: diameterKm,
+                velocity: velocityKms,
+                mass_kg: massKg.toExponential(2),
+                energy_joules: energyJoules.toExponential(2),
+                energy_Mt: energyMt.toFixed(1)
+            });
+
+            return energyMt;
+        }
+
+        // ========== 함수: 크레이터 직경 계산 ==========
+        /*
+         * 크레이터 형성 공식 (실제 과학 데이터 기반):
+         * - 에너지가 클수록 더 큰 크레이터 생성
+         * - 충돌 각도가 수평(90°)에 가까울수록 더 큰 크레이터
+         * - 측면 충돌(30°)일 때 에너지가 분산되어 작은 크레이터
+         * 
+         * 크레이터 = 기본값 × (에너지비)^(지수) × cos(각도)
+         */
+        function calculateCraterDiameter(energyMt, angleInDegrees) {
+            // 각도를 라디안으로 변환
+            const angleInRadians = (angleInDegrees * Math.PI) / 180;
+            
+            // 각도 계수: 90°(수평)일 때 최대, 30°(측면)일 때 최소
+            const angleCoefficient = Math.cos(angleInRadians);
+
+            // 실제 칙술루브: 10km 운석 → 약 150-200km 크레이터
+            // 에너지에 따른 크레이터 크기 공식
+            const baseSize = 150;
+            const referenceEnergy = 61;  // 실제 칙술루브 에너지 (Mt)
+            const craterDiameter = baseSize * Math.pow(energyMt / referenceEnergy, 1/3.4) * angleCoefficient;
+
+            // 최소 크레이터 크기 설정
+            return Math.max(20, craterDiameter);
+        }
+
+        // ========== 함수: 지진 규모 계산 ==========
+        /*
+         * 리히터 규모 공식: M = (2/3) × log₁₀(E) - 10.7
+         * 
+         * 여기서 E는 에너지를 erg(에르그, 에너지 단위) 단위로 표현합니다.
+         * 변환: 1 Mt TNT = 10^22 erg
+         */
+        function calculateEarthquakeMagnitude(energyMt) {
+            // Mt → erg로 변환
+            const energyErg = energyMt * 1e22;
+
+            // 리히터 규모 공식
+            const magnitude = (2/3) * Math.log10(energyErg) - 10.7;
+
+            console.log('📊 지진 규모 계산:', {
+                energy_Mt: energyMt,
+                energy_erg: energyErg.toExponential(2),
+                magnitude: magnitude.toFixed(1)
+            });
+
+            return magnitude;
+        }
+
+        // ========== 함수: 캔버스 애니메이션 ==========
+        /*
+         * HTML5 Canvas를 사용하여 2D 애니메이션을 그립니다.
+         * 유카탄반도 위에 운석이 충돌하고 충격파가 퍼져나가는 효과를 표현합니다.
+         */
+        function animateImpact(diameter, velocity, angle) {
+            const canvas = document.getElementById('impactCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // 캔버스 크기 설정
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            // 중심 좌표
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            // 배경 색상
+            const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, canvas.width);
+            bgGradient.addColorStop(0, 'rgba(0, 80, 150, 0.8)');
+            bgGradient.addColorStop(1, 'rgba(0, 10, 40, 1)');
+
+            // 로딩 스피너 숨기기
+            document.getElementById('canvasContainer').style.display = 'none';
+            canvas.style.display = 'block';
+
+            // 애니메이션 변수
+            let shockwaveRadius = 0;
+            let maxRadius = 250;
+            let animationFrames = 0;
+            const totalFrames = 60;
+
+            function drawFrame() {
+                // 배경 그리기
+                ctx.fillStyle = bgGradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 유카탄반도 표현 (원형)
+                ctx.fillStyle = 'rgba(100, 150, 100, 0.3)';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(100, 200, 100, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 프레임 진행도 계산
+                const progress = animationFrames / totalFrames;
+                shockwaveRadius = progress * maxRadius;
+                const alpha = 1 - progress;
+
+                // 충격파 그리기 (여러 겹의 원)
+                for (let i = 0; i < 3; i++) {
+                    const radius = shockwaveRadius - i * 20;
+                    if (radius > 0) {
+                        ctx.strokeStyle = `rgba(255, 150, 0, ${alpha * (1 - i * 0.3)})`;
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+
+                // 중심 운석 표현
+                const meteorSize = 15 * (1 - progress * 0.3);
+                ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.7})`;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, meteorSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 정보 텍스트 표시
+                ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Diameter: ${diameter.toFixed(1)} km`, centerX, 40);
+                ctx.fillText(`Velocity: ${velocity.toFixed(1)} km/s`, centerX, 65);
+                ctx.fillText(`Angle: ${angle.toFixed(0)}°`, centerX, 90);
+
+                animationFrames++;
+
+                if (animationFrames < totalFrames) {
+                    requestAnimationFrame(drawFrame);
+                } else {
+                    // 애니메이션 종료 후 최종 상태 표시
+                    ctx.fillStyle = 'rgba(255, 200, 0, 1)';
+                    ctx.font = 'bold 18px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Impact Complete! 충돌 완료!', centerX, canvas.height - 30);
+                }
+            }
+
+            drawFrame();
+        }
+
+        // ========== 함수: 상세 리포트 생성 ==========
+        function generateReport(energy, crater, magnitude, diameter, velocity) {
+            let extinctionHTML = '';
+
+            // 에너지 수준에 따른 멸종 시나리오
+            if (energy > 30) {
+                extinctionHTML = `
+                    <div class="alert-extinction">
+                        <strong>⚠️ 대규모 멸종 발생!</strong><br>
+                        이 정도의 충돌 에너지는 지구 생태계에 치명적입니다.
+                        충격 겨울(Impact Winter)로 인해 지표면 기온이 수십 도 떨어지고,
+                        광합성이 불가능해져 전 지구적 생태계 붕괴가 발생합니다.
+                        당시 지구 생물의 75% 이상이 멸종했을 것으로 추정됩니다.
+                    </div>
+                `;
+            } else if (energy > 10) {
+                extinctionHTML = `
+                    <div class="alert-extinction">
+                        <strong>⚠️ 심각한 환경 재해</strong><br>
+                        지역 기반의 대규모 재해와 기후 변화가 발생합니다.
+                        생물 종 다양성이 크게 감소하고 생태계의 재구성이 필요합니다.
+                    </div>
+                `;
+            } else {
+                extinctionHTML = `
+                    <div class="alert-extinction" style="background: rgba(100, 150, 100, 0.2); border-left-color: #64d4a0; color: #90ff9f;">
+                        <strong>✓ 국지적 재해</strong><br>
+                        충돌 지역과 인접 지역에 심각한 피해가 발생하지만,
+                        전 지구적 멸종 규모로 발전하지는 않습니다.
+                    </div>
+                `;
+            }
+
+            // 대기 진입 온도 계산 (속도가 클수록 온도 높음)
+            const atmosphereTemp = Math.min(6000, 1500 + velocity * 150);
+
+            // 결과 표시
+            document.getElementById('reportMagnitude').textContent = magnitude.toFixed(1);
+            document.getElementById('reportDescription').textContent = 
+                `이는 역사상 가장 큰 지진(칠레 1960년 9.5규모)의 약 ${(Math.pow(10, magnitude - 9.5) * 100).toFixed(0)}배 규모입니다.`;
+
+            document.getElementById('reportTemp').textContent = atmosphereTemp.toFixed(0) + ' K (약 ' + (atmosphereTemp - 273).toFixed(0) + '°C)';
+
+            document.getElementById('extinctionWarning').innerHTML = extinctionHTML;
+        }
+
+        // ========== 함수: 지구 기온 변화 차트 ==========
+        /*
+         * Chart.js를 사용하여 충돌 후 3년간의 지구 기온 변화를 시각화합니다.
+         * 에너지가 클수록 더 큰 기온 저하와 더 오래 지속됩니다.
+         */
+        function createTemperatureChart(energy) {
+            const ctx = document.getElementById('temperatureChart').getContext('2d');
+
+            // 기온 저하는 에너지에 비례
+            const tempDrop = Math.min(50, 5 + energy / 2);
+            const recoveryTime = Math.min(36, 6 + energy / 10);
+
+            const months = [];
+            const temperatures = [];
+
+            // 0개월부터 36개월(3년)까지 시뮬레이션
+            for (let m = 0; m <= 36; m++) {
+                months.push(m);
+
+                let temp;
+                if (m <= 6) {
+                    // 급격한 기온 저하 (처음 6개월)
+                    temp = 15 - (tempDrop * (m / 6));
+                } else if (m <= recoveryTime) {
+                    // 서서히 회복
+                    temp = 15 - tempDrop + (tempDrop * ((m - 6) / (recoveryTime - 6)));
+                } else {
+                    // 완전 회복
+                    temp = 15;
+                }
+
+                temperatures.push(temp);
+            }
+
+            // 기존 차트 제거
+            if (temperatureChart) {
+                temperatureChart.destroy();
+            }
+
+            temperatureChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [{
+                        label: '지구 평균 기온 (°C)',
+                        data: temperatures,
+                        borderColor: '#ff6b35',
+                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e0e6ff' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#e0e6ff' },
+                            title: { display: true, text: '기온 (°C)', color: '#e0e6ff' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#e0e6ff' },
+                            title: { display: true, text: '경과 시간 (개월)', color: '#e0e6ff' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== 함수: 생물 생존율 차트 ==========
+        /*
+         * 먹이사슬을 고려하여 식물 → 초식동물 → 육식동물 순으로 생존율이 감소합니다.
+         * 식물이 생존할 수 없으면 초식동물도 살 수 없고,
+         * 초식동물이 없으면 육식동물도 생존할 수 없습니다.
+         */
+        function createSurvivalChart(energy) {
+            const ctx = document.getElementById('survivalChart').getContext('2d');
+
+            // 멸종율 계산
+            const extinctionRate = Math.min(0.95, (energy / 100) * 0.95);
+            const survivalRate = 1 - extinctionRate;
+
+            const months = [];
+            const plantSurvival = [];
+            const herbivoreSurvival = [];
+            const carnivoreSurvival = [];
+
+            for (let m = 0; m <= 36; m++) {
+                months.push(m);
+
+                // ========== 단계 1: 식물 생존율 ==========
+                // 광합성 불가능으로 급격히 감소, 천천히 회복
+                let plant = 100;
+                if (m <= 12) {
+                    // 0-12개월: 급격한 감소
+                    plant = 100 * Math.pow(survivalRate, m / 6);
+                } else {
+                    // 12-36개월: 천천히 회복
+                    plant = 100 * survivalRate + (100 - 100 * survivalRate) * ((m - 12) / 24);
+                }
+
+                // ========== 단계 2: 초식동물 생존율 ==========
+                // 식물 생존율에 의존, 회복도 느림
+                let herbivore = 100 * survivalRate;
+                if (m <= 24) {
+                    herbivore = herbivore * Math.max(0.1, 1 - (m / 24));
+                } else {
+                    herbivore = herbivore * Math.max(0.1, 1 - (m / 24)) * (1 + (m - 24) / 12 * 0.5);
+                }
+
+                // ========== 단계 3: 육식동물 생존율 ==========
+                // 초식동물 생존율에 의존, 가장 심각한 감소
+                let carnivore = 100 * survivalRate;
+                if (m <= 36) {
+                    carnivore = carnivore * Math.max(0.05, 1 - (m / 20));
+                }
+
+                plantSurvival.push(Math.max(0, plant));
+                herbivoreSurvival.push(Math.max(0, herbivore));
+                carnivoreSurvival.push(Math.max(0, carnivore));
+            }
+
+            // 기존 차트 제거
+            if (survivalChart) {
+                survivalChart.destroy();
+            }
+
+            survivalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: '식물 (Plant)',
+                            data: plantSurvival,
+                            borderColor: '#00d4ff',
+                            backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0,
+                        },
+                        {
+                            label: '초식동물 (Herbivore)',
+                            data: herbivoreSurvival,
+                            borderColor: '#ffd700',
+                            backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0,
+                        },
+                        {
+                            label: '육식동물 (Carnivore)',
+                            data: carnivoreSurvival,
+                            borderColor: '#ff6b35',
+                            backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e0e6ff' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#e0e6ff' },
+                            title: { display: true, text: '생존율 (%)', color: '#e0e6ff' },
+                            min: 0,
+                            max: 100
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#e0e6ff' },
+                            title: { display: true, text: '경과 시간 (개월)', color: '#e0e6ff' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== 페이지 로드 시 초기화 ==========
+        // DOM이 완전히 로드되면 initializeResultsPage 함수 실행
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeResultsPage();
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
