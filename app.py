@@ -1,780 +1,260 @@
-# -*- coding: utf-8 -*-
-"""
-🌍 K-Pg 대멸종 시뮬레이션 - 통합 웹 애플리케이션
-HTML 웹사이트(운석 충돌 물리 시뮬레이션) + Python ABM(생태계 시뮬레이션) 통합
-
-실행: streamlit run app.py
-"""
-
 import streamlit as st
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import font_manager
-import math
-from kpg_simulation import (
-    Environment, Plant, Herbivore, Carnivore, Scavenger, World,
-    TOTAL_STEPS, IMPACT_STEP
-)
+import pandas as pd
+from abc import ABC, abstractmethod
 
-# ============================================================================
-# Streamlit 페이지 설정
-# ============================================================================
-st.set_page_config(
-    page_title="K-Pg 대멸종 시뮬레이션",
-    page_icon="🌍",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# =========================================================================
+# 🐍 [BACKEND] K-Pg 대멸종 에이전트 기반 모델링 (ABM) 엔진 구조
+# =========================================================================
 
-# ============================================================================
-# 세션 상태 초기화 (페이지 네비게이션 관리)
-# ============================================================================
-"""
-Streamlit의 session_state는 브라우저 세션 동안 상태를 유지합니다.
-- page: 현재 페이지 ('home' / 'impact_sim' / 'abm_sim')
-- asteroid_data: 운석 충돌 시뮬레이션의 입력값 저장
-- world: Python ABM 시뮬레이션 결과 저장
-"""
-if 'page' not in st.session_state:
-    st.session_state.page = 'home'
+class Species(ABC):
+    def __init__(self, count, growth_rate, death_rate):
+        self._count = count  
+        self.growth_rate = growth_rate
+        self.death_rate = death_rate
+        self.next_count = count 
 
-if 'asteroid_data' not in st.session_state:
-    st.session_state.asteroid_data = None
+    @property
+    def count(self):
+        return max(0.0, self._count)
 
-if 'world' not in st.session_state:
-    st.session_state.world = None
+    @count.setter
+    def count(self, value):
+        self._count = max(0.0, value)
 
-# ============================================================================
-# 함수: 운석 충돌 에너지 계산
-# ============================================================================
-def calculate_impact_energy(diameter_km, velocity_kms):
-    """
-    공식: E = (1/2) × m × v²
-    
-    단계별:
-    1. 소행성 부피 = (4/3) × π × r³ (구 공식)
-    2. 질량 = 부피 × 밀도 (3000 kg/m³ 가정)
-    3. 에너지 = 0.5 × 질량 × 속도²
-    4. 단위 변환: J → TNT 메가톤 (1 Mt = 4.184×10¹⁵ J)
-    """
-    diameter_m = diameter_km * 1000
-    radius_m = diameter_m / 2
-    velocity_ms = velocity_kms * 1000
-    density = 3000  # kg/m³
-    
-    # 구의 부피
-    volume_m3 = (4/3) * math.pi * (radius_m ** 3)
-    
-    # 질량
-    mass_kg = volume_m3 * density
-    
-    # 운동에너지
-    energy_joules = 0.5 * mass_kg * (velocity_ms ** 2)
-    
-    # TNT 메가톤으로 변환
-    energy_mt = energy_joules / (4.184e15)
-    
-    return energy_mt
-
-# ============================================================================
-# 함수: 크레이터 직경 계산
-# ============================================================================
-def calculate_crater_diameter(energy_mt, angle_degrees):
-    """
-    크레이터 = 에너지에 비례, 각도에 따라 조정
-    - 90°(정면): 최대
-    - 30°(측면): 최소 (에너지 분산)
-    """
-    angle_rad = math.radians(angle_degrees)
-    angle_coeff = math.cos(angle_rad)
-    
-    base_size = 150
-    reference_energy = 61
-    crater = base_size * ((energy_mt / reference_energy) ** (1/3.4)) * angle_coeff
-    
-    return max(20, crater)
-
-# ============================================================================
-# 함수: 지진 규모 계산
-# ============================================================================
-def calculate_earthquake_magnitude(energy_mt):
-    """
-    리히터 규모: M = (2/3) × log₁₀(E) - 10.7
-    E는 erg 단위 (1 Mt = 10²² erg)
-    """
-    energy_erg = energy_mt * 1e22
-    magnitude = (2/3) * math.log10(energy_erg) - 10.7
-    return magnitude
-
-# ============================================================================
-# 페이지 1: 홈 (메뉴)
-# ============================================================================
-def page_home():
-    """메인 홈페이지 - 두 가지 시뮬레이션 선택"""
-    st.markdown("""
-    <style>
-    .title-main {
-        font-size: 3rem;
-        font-weight: bold;
-        text-align: center;
-        background: linear-gradient(45deg, #00d4ff, #0099ff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="title-main">🌍 칙술루브 충돌 시뮬레이터</div>', 
-                unsafe_allow_html=True)
-    
-    st.markdown("""
-    # 약 6,600만 년 전, 유카탄 반도에 떨어진 운석
-    
-    지구 역사상 가장 극적인 사건을 **두 가지 방식**으로 시뮬레이션합니다:
-    """)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        ### 🌐 방법 1: 물리 시뮬레이션
-        
-        **HTML 기반 운석 충돌 시뮬레이터**
-        - 🎚️ 슬라이더로 직경, 속도, 각도 설정
-        - ⚡ 물리 공식으로 에너지 계산
-        - 📊 3년간의 기온 변화 그래프
-        - 🦕 생물 종 생존율 추이
-        - 🎬 충격파 애니메이션
-        """)
-        
-        if st.button("🚀 물리 시뮬레이션 시작", use_container_width=True, key="impact"):
-            st.session_state.page = 'impact_sim'
-            st.rerun()
-    
-    with col2:
-        st.markdown("""
-        ### 🐍 방법 2: 에이전트 기반 모델링 (ABM)
-        
-        **생태계 붕괴 시뮬레이션**
-        - 🎛️ 초기 개체수 조정
-        - 🌡️ 환경 급변 시뮬레이션
-        - 🔗 먹이사슬 연쇄 붕괴
-        - 📈 시간별 생존율 추이
-        - 💀 대멸종 메커니즘 분석
-        """)
-        
-        if st.button("🔬 ABM 시뮬레이션 시작", use_container_width=True, key="abm"):
-            st.session_state.page = 'abm_sim'
-            st.rerun()
-    
-    st.markdown("---")
-    
-    st.info("""
-    💡 **학습 목표**
-    
-    두 시뮬레이션은 상호 보완적입니다:
-    - **물리 시뮬레이션**: 운석 충돌의 물리적 영향 (에너지, 기온 변화)
-    - **ABM**: 생태계의 생물학적 반응 (개체수, 멸종)
-    
-    함께 보면 K-Pg 대멸종의 **전체 그림**을 이해할 수 있습니다! 🌍
-    """)
-
-# ============================================================================
-# 페이지 2: 운석 충돌 물리 시뮬레이션 (입력)
-# ============================================================================
-def page_impact_input():
-    """index.html과 동일한 기능 - 파라미터 입력"""
-    
-    col_nav, col_space = st.columns([1, 9])
-    with col_nav:
-        if st.button("← 메뉴로 돌아가기"):
-            st.session_state.page = 'home'
-            st.rerun()
-    
-    st.markdown("""
-    <style>
-    .title-sub {
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-align: center;
-        color: #00d4ff;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="title-sub">⚙️ 충돌 조건 설정</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    아래 슬라이더를 조정하여 운석의 특성을 설정하세요.
-    물리 공식(E = ½mv²)을 사용하여 자동으로 충돌 영향을 계산합니다.
-    """)
-    
-    # 세 개 슬라이더
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("### 🪨 소행성 직경")
-        diameter = st.slider(
-            "직경 (km)",
-            min_value=1.0, max_value=30.0, value=10.0, step=0.5,
-            label_visibility="collapsed"
-        )
-        st.caption(f"**{diameter:.1f} km** (실제 칙술루브: ~10 km)")
-    
-    with col2:
-        st.markdown("### ⚡ 충돌 속도")
-        velocity = st.slider(
-            "속도 (km/s)",
-            min_value=11.0, max_value=40.0, value=20.0, step=0.5,
-            label_visibility="collapsed"
-        )
-        st.caption(f"**{velocity:.1f} km/s** (평균 우주 충돌: ~20 km/s)")
-    
-    with col3:
-        st.markdown("### 📐 충돌 각도")
-        angle = st.slider(
-            "각도 (°)",
-            min_value=30, max_value=90, value=60, step=1,
-            label_visibility="collapsed"
-        )
-        st.caption(f"**{angle}°** (90°: 정면, 30°: 측면)")
-    
-    # 실시간 계산값 표시
-    st.markdown("---")
-    st.markdown("### 📊 즉시 계산값")
-    
-    energy = calculate_impact_energy(diameter, velocity)
-    crater = calculate_crater_diameter(energy, angle)
-    magnitude = calculate_earthquake_magnitude(energy)
-    
-    calc_col1, calc_col2, calc_col3 = st.columns(3)
-    
-    with calc_col1:
-        st.metric("충돌 에너지", f"{energy:.1f} Mt TNT", 
-                 delta=f"(실제 칙술루브: ~61 Mt)")
-    
-    with calc_col2:
-        st.metric("크레이터 직경", f"{crater:.0f} km",
-                 delta=f"(각도 {angle}° 적용)")
-    
-    with calc_col3:
-        st.metric("지진 규모", f"{magnitude:.1f}",
-                 delta="리히터 스케일")
-    
-    # 시뮬레이션 시작 버튼
-    st.markdown("---")
-    
-    col_btn1, col_btn2 = st.columns([3, 1])
-    
-    with col_btn1:
-        if st.button("🚀 충돌 시뮬레이션 시작", use_container_width=True, 
-                    type="primary", key="launch_impact"):
-            # 데이터를 session_state에 저장
-            st.session_state.asteroid_data = {
-                'diameter': diameter,
-                'velocity': velocity,
-                'angle': angle,
-                'energy': energy,
-                'crater': crater,
-                'magnitude': magnitude
-            }
-            st.session_state.page = 'impact_results'
-            st.rerun()
-    
-    with col_btn2:
+    @abstractmethod
+    def update_next_phase(self, current_env, other_species):
         pass
 
-# ============================================================================
-# 페이지 3: 운석 충돌 결과 (분석)
-# ============================================================================
-def page_impact_results():
-    """result.html과 동일한 기능 - 결과 분석 및 그래프"""
-    
-    if st.session_state.asteroid_data is None:
-        st.error("❌ 입력 데이터가 없습니다. 이전 페이지로 돌아가주세요.")
-        if st.button("← 뒤로가기"):
-            st.session_state.page = 'impact_sim'
-            st.rerun()
-        return
-    
-    data = st.session_state.asteroid_data
-    diameter = data['diameter']
-    velocity = data['velocity']
-    angle = data['angle']
-    energy = data['energy']
-    crater = data['crater']
-    magnitude = data['magnitude']
-    
-    col_nav, col_space = st.columns([1, 9])
-    with col_nav:
-        if st.button("← 메뉴로"):
-            st.session_state.page = 'home'
-            st.rerun()
-    
-    st.markdown("""
-    <style>
-    .title-sub {
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-align: center;
-        color: #ff6b35;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="title-sub">📊 충돌 분석 결과</div>', unsafe_allow_html=True)
-    
-    # 입력값 재확인
-    st.subheader("📍 입력 파라미터")
-    param_col1, param_col2, param_col3 = st.columns(3)
-    
-    with param_col1:
-        st.metric("소행성 직경", f"{diameter:.1f} km")
-    with param_col2:
-        st.metric("충돌 속도", f"{velocity:.1f} km/s")
-    with param_col3:
-        st.metric("충돌 각도", f"{angle}°")
-    
-    # 계산 결과
-    st.subheader("⚡ 계산 결과")
-    result_col1, result_col2, result_col3 = st.columns(3)
-    
-    with result_col1:
-        st.metric("충돌 에너지", f"{energy:.1f} Mt")
-    with result_col2:
-        st.metric("크레이터", f"{crater:.0f} km")
-    with result_col3:
-        st.metric("지진 규모", f"{magnitude:.1f}")
-    
-    # Canvas 애니메이션 (Python matplotlib 사용)
-    st.subheader("🌏 충돌 시뮬레이션 애니메이션")
-    
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor='#1a1f3a')
-    ax.set_facecolor('#1a1a2e')
-    
-    # 유카탄반도 표현
-    center_x, center_y = 0.5, 0.5
-    
-    # 배경
-    circle_bg = plt.Circle((center_x, center_y), 0.3, color='#2d5a3d', alpha=0.4)
-    ax.add_patch(circle_bg)
-    circle_border = plt.Circle((center_x, center_y), 0.3, fill=False, 
-                               edgecolor='#64d4a0', linewidth=2, alpha=0.6)
-    ax.add_patch(circle_border)
-    
-    # 충격파 표현 (여러 원)
-    colors_shock = ['#ff9500', '#ff6b00', '#ff4500']
-    for i, color in enumerate(colors_shock):
-        r = 0.1 + i * 0.08
-        circle_shock = plt.Circle((center_x, center_y), r, fill=False,
-                                 edgecolor=color, linewidth=3, alpha=0.8)
-        ax.add_patch(circle_shock)
-    
-    # 중심 운석
-    circle_meteor = plt.Circle((center_x, center_y), 0.03, color='#ff6b00', alpha=0.9)
-    ax.add_patch(circle_meteor)
-    
-    # 텍스트
-    ax.text(center_x, 0.95, '☄️ 충돌 완료!', ha='center', fontsize=20, 
-            color='#ffd700', fontweight='bold')
-    ax.text(center_x, 0.15, f'직경: {diameter:.1f} km | 속도: {velocity:.1f} km/s | 각도: {angle}°',
-            ha='center', fontsize=11, color='#e0e6ff')
-    ax.text(center_x, 0.05, 'Yucatan Peninsula', ha='center', fontsize=10, 
-            color='#a0adc7', style='italic')
-    
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_aspect('equal')
-    ax.axis('off')
-    
-    st.pyplot(fig)
-    
-    # 기온 변화 그래프
-    st.subheader("🌡️ 지구 평균 기온 변화 (Impact Winter)")
-    
-    months = np.arange(0, 37)
-    temp_drop = min(50, 5 + energy / 2)
-    recovery_time = min(36, 6 + energy / 10)
-    
-    temperatures = []
-    for m in months:
-        if m <= 6:
-            temp = 15 - (temp_drop * (m / 6))
-        elif m <= recovery_time:
-            temp = 15 - temp_drop + (temp_drop * ((m - 6) / (recovery_time - 6)))
-        else:
-            temp = 15
-        temperatures.append(temp)
-    
-    fig_temp, ax_temp = plt.subplots(figsize=(10, 5))
-    ax_temp.fill_between(months, temperatures, alpha=0.3, color='#ff6b35')
-    ax_temp.plot(months, temperatures, color='#ff6b35', linewidth=3, label='지구 평균 기온')
-    ax_temp.axhline(15, color='gray', linestyle=':', alpha=0.5, label='정상 기온')
-    ax_temp.set_xlabel('경과 시간 (개월)', fontsize=12)
-    ax_temp.set_ylabel('기온 (°C)', fontsize=12)
-    ax_temp.set_title('충돌 후 3년간 기온 변화', fontsize=14, fontweight='bold')
-    ax_temp.grid(True, alpha=0.3)
-    ax_temp.legend()
-    
-    st.pyplot(fig_temp)
-    
-    # 생물 생존율 그래프
-    st.subheader("🦕 생물 종 생존율 변화")
-    
-    extinction_rate = min(0.95, (energy / 100) * 0.95)
-    survival_rate = 1 - extinction_rate
-    
-    plant_survival = []
-    herbivore_survival = []
-    carnivore_survival = []
-    
-    for m in months:
-        # 식물
-        if m <= 12:
-            plant = 100 * (survival_rate ** (m / 6))
-        else:
-            plant = 100 * survival_rate + (100 - 100 * survival_rate) * ((m - 12) / 24)
-        plant_survival.append(max(0, plant))
-        
-        # 초식동물
-        herbivore = 100 * survival_rate
-        if m <= 24:
-            herbivore = herbivore * max(0.1, 1 - (m / 24))
-        else:
-            herbivore = herbivore * max(0.1, 1 - (m / 24)) * (1 + (m - 24) / 12 * 0.5)
-        herbivore_survival.append(max(0, herbivore))
-        
-        # 육식동물
-        carnivore = 100 * survival_rate
-        if m <= 36:
-            carnivore = carnivore * max(0.05, 1 - (m / 20))
-        carnivore_survival.append(max(0, carnivore))
-    
-    fig_surv, ax_surv = plt.subplots(figsize=(10, 5))
-    ax_surv.plot(months, plant_survival, label='식물 (Plant)', color='#00d4ff', linewidth=2.5)
-    ax_surv.plot(months, herbivore_survival, label='초식동물 (Herbivore)', 
-                color='#ffd700', linewidth=2.5)
-    ax_surv.plot(months, carnivore_survival, label='육식동물 (Carnivore)', 
-                color='#ff6b35', linewidth=2.5)
-    ax_surv.axhline(100, color='gray', linestyle=':', alpha=0.5)
-    ax_surv.set_xlabel('경과 시간 (개월)', fontsize=12)
-    ax_surv.set_ylabel('생존율 (%)', fontsize=12)
-    ax_surv.set_title('충돌 후 먹이사슬 붕괴', fontsize=14, fontweight='bold')
-    ax_surv.set_ylim(0, 110)
-    ax_surv.grid(True, alpha=0.3)
-    ax_surv.legend()
-    
-    st.pyplot(fig_surv)
-    
-    # 상세 리포트
-    st.subheader("📋 상세 분석 리포트")
-    
-    report_col1, report_col2 = st.columns(2)
-    
-    with report_col1:
-        st.info(f"""
-        **지진 규모: {magnitude:.1f}**
-        
-        이는 역사상 가장 큰 지진(칠레 1960년 9.5규모)의 약 {(10 ** (magnitude - 9.5) * 100):.0f}배 규모입니다.
-        """)
-    
-    with report_col2:
-        atmosphere_temp = min(6000, 1500 + velocity * 150)
-        st.warning(f"""
-        **대기권 진입 온도: {atmosphere_temp:.0f} K**
-        
-        운석이 대기권에 진입할 때 마찰열로 극도의 열을 발생시킵니다.
-        """)
-    
-    # 멸종 시나리오
-    if energy > 30:
-        st.error(f"""
-        ### ⚠️ 대규모 멸종 발생!
-        
-        이 충돌 에너지({energy:.1f} Mt)는 지구 생태계에 치명적입니다.
-        
-        **충격 겨울(Impact Winter)** 메커니즘:
-        1. 운석 충돌 → 엄청난 에너지 방출
-        2. 먼지 + 화산재 + 황산염 에어로졸이 대기를 덮음
-        3. 태양빛 차단 → 일조량 급감
-        4. 지표면 기온 급락 (수십 도 하강)
-        5. 광합성 중단 → 먹이사슬 붕괴
-        6. 식물 → 초식동물 → 육식동물 순서로 멸종
-        
-        **결과**: 지구 생물의 75% 이상이 멸종 (실제 K-Pg 대멸종과 일치)
-        """)
-    elif energy > 10:
-        st.warning(f"""
-        ### ⚠️ 심각한 환경 재해 발생
-        
-        이 충돌 에너지({energy:.1f} Mt)로 지역 기반의 대규모 재해와 기후 변화가 발생합니다.
-        생물 종 다양성이 크게 감소합니다.
-        """)
-    else:
-        st.success(f"""
-        ### ✓ 국지적 재해
-        
-        이 충돌 에너지({energy:.1f} Mt)는 충돌 지역과 인접 지역에 심각한 피해를 입히지만,
-        전 지구적 멸종 규모로 발전하지는 않습니다.
-        """)
-    
-    # 네비게이션
-    nav_col1, nav_col2, nav_col3 = st.columns(3)
-    
-    with nav_col1:
-        if st.button("← 메뉴로 돌아가기", use_container_width=True):
-            st.session_state.page = 'home'
-            st.rerun()
-    
-    with nav_col2:
-        if st.button("🔄 다시 입력하기", use_container_width=True):
-            st.session_state.page = 'impact_sim'
-            st.rerun()
-    
-    with nav_col3:
-        if st.button("🔬 ABM 시뮬레이션도 보기", use_container_width=True):
-            st.session_state.page = 'abm_sim'
-            st.rerun()
+    def apply_phase_update(self):
+        self._count = self.next_count
 
-# ============================================================================
-# 페이지 4: ABM 시뮬레이션 (생태계)
-# ============================================================================
-def page_abm_simulation():
-    """생태계 시뮬레이션 (기존 dashboard.py 기능)"""
-    
-    col_nav, col_space = st.columns([1, 9])
-    with col_nav:
-        if st.button("← 메뉴로"):
-            st.session_state.page = 'home'
-            st.rerun()
-    
-    st.markdown("""
-    <style>
-    .title-sub {
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-align: center;
-        color: #0099ff;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="title-sub">🔬 에이전트 기반 생태계 시뮬레이션 (ABM)</div>', 
-                unsafe_allow_html=True)
-    
-    # 사이드바 설정
-    with st.sidebar:
-        st.header("⚙️ 시뮬레이션 설정")
+
+class Plant(Species):
+    def update_next_phase(self, current_env, other_species):
+        sunlight_factor = max(0.05, (current_env['temp'] / 25.0) * (1.0 - current_env['soot_block']))
+        acid_damage = max(0.1, (7.0 - current_env['acid_rain_ph']) * 0.2)
         
-        total_steps = st.slider(
-            "총 시뮬레이션 길이 (step)",
-            min_value=30, max_value=150, value=TOTAL_STEPS, step=10
-        )
+        carrying_capacity = max(100.0, 5000.0 * sunlight_factor * (1.0 - acid_damage))
         
-        impact_step = st.slider(
-            "운석 충돌 시점 (step)",
-            min_value=5, max_value=30, value=IMPACT_STEP, step=1
-        )
+        births = self.growth_rate * self.count * (1.0 - (self.count / carrying_capacity))
+        deaths = self.death_rate * self.count * (1.0 + acid_damage)
+        eaten = 0.06 * other_species['herbivores'].count
         
-        st.markdown("---")
-        st.subheader("초기 개체수")
+        self.next_count = self.count + births - deaths - eaten
+
+
+class Herbivore(Species):
+    def update_next_phase(self, current_env, other_species):
+        plant_food = other_species['plants'].count
+        starvation_factor = 1.0 if plant_food > self.count else (plant_food / (self.count + 1e-5))
+        tsunami_damage = 0.2 if current_env['step'] == 1 and current_env['tsunami'] > 100 else 0.0
         
-        fern_pop = st.number_input("🌿 양치식물", min_value=1000, value=10000, step=1000)
-        triceratops_pop = st.number_input("🦖 트리케라톱스", min_value=100, value=1200, step=100)
-        trex_pop = st.number_input("🦕 티라노사우루스", min_value=50, value=400, step=50)
-        mammal_pop = st.number_input("🐭 쥐형 포유류", min_value=500, value=2500, step=500)
-        crocodile_pop = st.number_input("🐊 악어", min_value=100, value=600, step=100)
-    
-    # 실행 버튼
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        run_button = st.button("🚀 시뮬레이션 실행", use_container_width=True, type="primary")
-    
-    with col2:
-        reset_button = st.button("🔄 초기화", use_container_width=True)
-    
-    # 시뮬레이션 함수
-    def run_abm_simulation():
-        """ABM 시뮬레이션 실행"""
-        env = Environment(impact_step=impact_step)
+        births = self.growth_rate * self.count * starvation_factor
+        deaths = self.death_rate * self.count * (1.5 - starvation_factor) + (self.count * tsunami_damage)
+        predated = 0.08 * other_species['carnivores'].count
         
-        # 종 생성
-        fern = Plant("양치식물", population=fern_pop, body_size=1,
-                    habitat="surface", growth_rate=0.15, color="#2e7d32",
-                    refuge=int(fern_pop * 0.03))
+        self.next_count = self.count + births - deaths - predated
+
+
+class Carnivore(Species):
+    def update_next_phase(self, current_env, other_species):
+        prey = other_species['herbivores'].count
+        starvation_factor = 1.0 if prey > self.count else (prey / (self.count + 1e-5))
         
-        triceratops = Herbivore("트리케라톱스", population=triceratops_pop, body_size=8,
-                               habitat="surface", growth_rate=0.06, color="#ef6c00",
-                               food_sources=[fern])
+        births = self.growth_rate * self.count * starvation_factor
+        deaths = self.death_rate * self.count * (2.2 - starvation_factor)
         
-        trex = Carnivore("티라노사우루스", population=trex_pop, body_size=9,
-                        habitat="surface", growth_rate=0.04, color="#c62828",
-                        food_sources=[triceratops])
+        self.next_count = self.count + births - deaths
+
+
+class AdvancedEcosystemSimulation:
+    def __init__(self, size, v, soot, sulfur, ph, tsunami, is_extinction_level):
+        self.size = size
+        self.v = v
+        self.soot_input = soot
+        self.sulfur_input = sulfur
+        self.ph_input = ph
+        self.tsunami_input = tsunami
+        self.is_extinction_level = is_extinction_level # 임계점 돌파 여부
         
-        mammal = Scavenger("쥐형 포유류", population=mammal_pop, body_size=1,
-                          habitat="underground", growth_rate=0.10, color="#6a1b9a",
-                          capacity=int(mammal_pop * 3))
-        
-        crocodile = Carnivore("악어", population=crocodile_pop, body_size=5,
-                             habitat="aquatic", growth_rate=0.04, color="#1565c0",
-                             food_sources=[mammal], capacity=int(crocodile_pop * 3))
-        
-        world = World(env, [fern, triceratops, trex, mammal, crocodile])
-        
-        # 진행 바
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for step in range(1, total_steps + 1):
-            world.step()
-            progress = step / total_steps
-            progress_bar.progress(progress)
-            status_text.text(f"진행 중... {step}/{total_steps} step")
-        
-        progress_bar.empty()
-        status_text.empty()
-        
-        return world
-    
-    # 결과 표시 함수
-    def display_abm_results(world):
-        """ABM 시뮬레이션 결과 표시"""
-        
-        # 종별 생존 현황
-        st.subheader("📊 종별 생존 현황")
-        
-        cols = st.columns(5)
-        for idx, species in enumerate(world.species):
-            with cols[idx]:
-                if species.is_extinct:
-                    status = "💀 멸종"
-                    color = "#ff6b6b"
-                else:
-                    status = "✅ 생존"
-                    color = "#51cf66"
-                
-                st.markdown(f"""
-                <div style="background-color: {color}; padding: 15px; border-radius: 8px; text-align: center; color: white;">
-                    <h4>{species.name}</h4>
-                    <p style="font-size: 20px; font-weight: bold;">{species.population:,}</p>
-                    <p>{status}</p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # 상세 결과 테이블
-        st.subheader("📈 상세 결과")
-        
-        data = []
-        for s in world.species:
-            initial = s.history[0]
-            final = s.population
-            change = final - initial
-            change_pct = (change / initial * 100) if initial > 0 else 0
+        self.species = {
+            'plants': Plant(count=2500.0, growth_rate=0.45, death_rate=0.08),
+            'herbivores': Herbivore(count=200.0, growth_rate=0.22, death_rate=0.09),
+            'carnivores': Carnivore(count=60.0, growth_rate=0.12, death_rate=0.07)
+        }
+        self.env = {'temp': 25.0, 'soot_block': 0.0, 'acid_rain_ph': 7.0, 'tsunami': 0.0, 'step': 0}
+
+    def run_simulation(self, steps=60):
+        history = []
+        for step in range(steps):
+            self.env['step'] = step
             
-            if s.is_extinct:
-                status = f"💀 Time {s.extinction_step}"
+            if step < 5:
+                self.env['temp'] = 25.0
+                self.env['soot_block'] = 0.0
+                self.env['acid_rain_ph'] = 7.0
+                self.env['tsunami'] = 0.0
             else:
-                status = "✅ 생존"
+                t = step - 5
+                
+                # 임계점 돌파 여부에 따른 기후 하강 폭의 수학적 스케일링 변조
+                if self.is_extinction_level:
+                    temp_drop = (15.0 * (self.size / 10.0) * (self.sulfur_input / 100.0)) + (5.0 * (self.soot_input / 100.0))
+                    self.env['soot_block'] = (self.soot_input / 100.0) * np.exp(-t / 12)
+                    self.env['acid_rain_ph'] = self.ph_input if t < 24 else 7.0 - (7.0 - self.ph_input) * np.exp(-(t-24)/10)
+                else:
+                    # 임계점 미달 시 성층권 돌파 실패 모델링 (피해 최소화)
+                    temp_drop = 3.0 * (self.size / 3.0) 
+                    self.env['soot_block'] = (self.soot_input / 100.0) * 0.1 * np.exp(-t / 3)
+                    self.env['acid_rain_ph'] = max(5.6, self.ph_input) # 정상 범주의 빗물 산도 보존
+                
+                self.env['temp'] = 25.0 - (temp_drop * (t / (t + 2)) * np.exp(-t / 20))
+                self.env['tsunami'] = self.tsunami_input if t == 0 else 0.0
             
-            data.append({
-                "종": s.name,
-                "초기": f"{initial:,}",
-                "최종": f"{final:,}",
-                "변화": f"{change:+,} ({change_pct:+.1f}%)",
-                "상태": status
+            for sp in self.species.values():
+                sp.update_next_phase(self.env, self.species)
+            for sp in self.species.values():
+                sp.apply_phase_update()
+                
+            history.append({
+                "세대(Step)": step,
+                "백악기 식물군": self.species['plants'].count,
+                "초식 공룡": self.species['herbivores'].count,
+                "육식 공룡": self.species['carnivores'].count,
+                "지구 평균 기온(°C)": self.env['temp'],
+                "대기 햇빛 차단율(%)": self.env['soot_block'] * 100
             })
-        
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
-        
-        # 그래프
-        st.subheader("🌡️ 환경 변화와 종별 생존율")
-        
-        steps = list(range(len(world.species[0].history)))
-        
-        fig, (ax_env, ax_pop) = plt.subplots(
-            2, 1, figsize=(12, 8), sharex=True,
-            gridspec_kw={"height_ratios": [1, 2]}
-        )
-        
-        # 환경 변화
-        ax_env.plot(steps, world.sunlight_history, color="#f9a825", linewidth=2.5, label="일조량")
-        ax_env.set_ylabel("일조량 (%)", color="#f9a825", fontsize=11)
-        ax_env.tick_params(axis="y", labelcolor="#f9a825")
-        ax_env.set_title("환경 변화와 종별 생존율", fontsize=14, fontweight="bold")
-        
-        ax_temp = ax_env.twinx()
-        ax_temp.plot(steps, world.temp_history, color="#0277bd", linewidth=2.5, label="기온")
-        ax_temp.set_ylabel("기온 (°C)", color="#0277bd", fontsize=11)
-        ax_temp.tick_params(axis="y", labelcolor="#0277bd")
-        
-        # 범례
-        env_lines = ax_env.get_lines() + ax_temp.get_lines()
-        ax_env.legend(env_lines, [ln.get_label() for ln in env_lines], loc="upper right")
-        
-        # 종별 생존율
-        for s in world.species:
-            survival = [h / s.history[0] * 100 for h in s.history]
-            label = f"{s.name} ({s.population:,})"
-            ax_pop.plot(steps, survival, label=label, color=s.color, linewidth=2.5)
-        
-        ax_pop.axhline(100, color="gray", linestyle=":", alpha=0.6)
-        ax_pop.set_xlabel("시간 (Time-step)", fontsize=11)
-        ax_pop.set_ylabel("초기 대비 개체수 (%)", fontsize=11)
-        ax_pop.set_xlim(0, len(steps) - 1)
-        ax_pop.legend(loc="upper left", fontsize=10)
-        ax_pop.grid(True, alpha=0.3)
-        
-        # 운석 충돌 표시
-        for ax in (ax_env, ax_pop):
-            ax.axvline(world.env.impact_step, color="red", linestyle="--", linewidth=2, alpha=0.7)
-        
-        fig.tight_layout()
-        st.pyplot(fig)
-        
-        # 통계
-        st.subheader("📉 시뮬레이션 통계")
-        
-        stat_col1, stat_col2, stat_col3 = st.columns(3)
-        
-        extinct_count = sum(1 for s in world.species if s.is_extinct)
-        survive_count = len(world.species) - extinct_count
-        
-        with stat_col1:
-            st.metric("생존한 종", f"{survive_count}/{len(world.species)}")
-        
-        with stat_col2:
-            st.metric("멸종한 종", f"{extinct_count}/{len(world.species)}")
-        
-        with stat_col3:
-            st.metric("최종 사체 풀", f"{int(world.carrion_pool):,}")
-    
-    # 버튼 이벤트
-    if run_button:
-        st.session_state.world = run_abm_simulation()
-        st.success("✅ 시뮬레이션 완료!")
-    
-    if reset_button:
-        st.session_state.world = None
-        st.info("초기화되었습니다. 파라미터를 조정한 후 다시 실행해주세요.")
-    
-    # 결과 표시
-    if st.session_state.world is not None:
-        display_abm_results(st.session_state.world)
-    else:
-        st.info("⚠️ '시뮬레이션 실행' 버튼을 눌러 시작하세요.")
+        return history
 
-# ============================================================================
-# 메인 라우터
-# ============================================================================
-if st.session_state.page == 'home':
-    page_home()
-elif st.session_state.page == 'impact_sim':
-    page_impact_input()
-elif st.session_state.page == 'impact_results':
-    page_impact_results()
-elif st.session_state.page == 'abm_sim':
-    page_abm_simulation()
+# =========================================================================
+# 🚀 [FRONTEND] Streamlit 대시보드 UI 및 시각화 파트
+# =========================================================================
+
+st.set_page_config(page_title="통합 K-Pg 대멸종 ABM 시뮬레이터", layout="wide")
+
+st.title("☄️ K-Pg 대멸종 통합 시뮬레이션 시스템 (Advanced ABM)")
+st.markdown("""
+이 프로그램은 **소행성 충돌의 기초 물리 공식**과 지구생물의 75% 이상을 도멸시키는 **과학적 에너지 임계점(2,400,000 Mt)**을 연동한 시뮬레이터입니다.
+""")
+st.divider()
+
+# 사이드바 매개변수
+st.sidebar.header("🛸 1. 기본 소행성 제어")
+d_val = st.sidebar.slider("소행성 직경 (km)", 1.0, 30.0, 10.0, step=0.5)
+v_val = st.sidebar.slider("충돌 속도 (km/s)", 11.0, 40.0, 20.0, step=1.0)
+a_val = st.sidebar.slider("충돌 각도 (도)", 30, 90, 60, step=5)
+
+st.sidebar.markdown("---")
+
+st.sidebar.header("🔬 2. 대멸종 환경 상세 변수 설정")
+with st.sidebar.expander("🛠️ 세부 환경 변수 직접 튜닝", expanded=True):
+    soot_val = st.slider("대기 그을음/미세먼지 방출량 (%)", 0, 100, 85)
+    sulfur_val = st.slider("성층권 황산염 가스 주입량 (%)", 0, 100, 90)
+    ph_val = st.slider("초기 산성비 산도 (pH)", 1.0, 7.0, 3.8, step=0.1)
+    tsunami_val = st.slider("초기 메가 쓰나미 높이 (m)", 0, 500, 300, step=50)
+
+st.sidebar.markdown("---")
+run_engine = st.sidebar.button("💥 시뮬레이션 엔진 가동 (Run Engine)", type="primary", use_container_width=True)
+
+# 📐 [물리 에너지 연산]
+radius_meters = (d_val * 1000) / 2
+v_meters_second = v_val * 1000
+asteroid_mass = (4/3) * np.pi * (radius_meters ** 3) * 3000
+energy_j = 0.5 * asteroid_mass * (v_meters_second ** 2)
+energy_megaton = energy_j / (4.184 * (10**15))
+
+crater_dia = 1.2 * (energy_megaton ** (1/3.4)) * np.cos(np.radians(90 - a_val))
+earthquake_m = 0.67 * np.log10(energy_j) - 5.87
+
+# 🚨 과학적 대멸종 에너지 임계점 정의 (TNT 2,400,000 메가톤)
+EXTINCTION_THRESHOLD_MT = 2400000
+is_extinction_level = energy_megaton >= EXTINCTION_THRESHOLD_MT
+
+if run_engine:
+    st.subheader("🌋 1단계 결과: 충돌 물리학 장비 계측 데이터")
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("TNT 폭발 에너지", f"{energy_megaton:,.0f} Mt", f"히로시마 원폭 {int(energy_megaton/15):,}배")
+    m2.metric("최종 크레이터 지름", f"{crater_dia:.1f} km")
+    m3.metric("리히터 규모 지진", f"{earthquake_m:.1f} M")
+    
+    # 임계점 돌파 여부에 따른 경보 문구 레이아웃 변동
+    if is_extinction_level:
+        st.error(f"🚨 **[위험] 에너지 임계점 돌파:** 충돌 에너지가 대멸종 하한선({EXTINCTION_THRESHOLD_MT:,.0f} Mt)을 초과했습니다. 성층권 변조 공정이 시작됩니다.")
+    else:
+        st.success(f"✅ **[안전] 에너지 임계점 미달:** 충돌 에너지가 대멸종 하한선({EXTINCTION_THRESHOLD_MT:,.0f} Mt)보다 낮습니다. 분출물이 성층권에 도달하지 못합니다.")
+        
+    st.divider()
+    
+    # ABM 가동
+    sim_instance = AdvancedEcosystemSimulation(d_val, v_val, soot_val, sulfur_val, ph_val, tsunami_val, is_extinction_level)
+    simulation_data = sim_instance.run_simulation(steps=60)
+    df_result = pd.DataFrame(simulation_data)
+    
+    st.subheader("📉 2단계 결과: 생태계 에이전트 상호작용 및 기후 그래프")
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown("##### 🦖 먹이사슬 에이전트 개체수 변동 추이")
+        st.line_chart(df_result.set_index("세대(Step)")[["백악기 식물군", "초식 공룡", "육식 공룡"]])
+    with g2:
+        st.markdown("##### ❄️ 지구 환경 변수 변화 트렌드")
+        st.line_chart(df_result.set_index("세대(Step)")[["지구 평균 기온(°C)", "대기 햇빛 차단율(%)"]])
+        
+    st.divider()
+    
+    # 📝 3단계 결과: 데이터 기반 자동 그래프 해석 리포트
+    st.subheader("📝 3단계 결과: 데이터 기반 자동 그래프 해석 리포트")
+    
+    min_temp = df_result["지구 평균 기온(°C)"].min()
+    max_soot = df_result["대기 햇빛 차단율(%)"].max()
+    
+    herb_extinct_step = df_result[df_result["초식 공룡"] <= 5.0]["세대(Step)"]
+    carn_extinct_step = df_result[df_result["육식 공룡"] <= 5.0]["세대(Step)"]
+    
+    herb_extinct_time = f"약 {herb_extinct_step.iloc[0]}세대" if not herb_extinct_step.empty else "안정세 유지"
+    carn_extinct_time = f"약 {carn_extinct_step.iloc[0]}세대" if not carn_extinct_step.empty else "안정세 유지"
+
+    if is_extinction_level:
+        st.error("### 🔴 데이터 해석 결과: 전 지구적 대멸종 확정 (75% 이상 절멸)")
+    else:
+        st.success("### 🟢 데이터 해석 결과: 국지적 피해 및 백악기 생태계 보존")
+
+    tab1, tab2, tab3 = st.tabs(["❄️ 기온 및 햇빛 차트 해석", "🦖 먹이사슬 도미노 해석", "🔬 지구과학 탐구 결론"])
+    
+    with tab1:
+        if is_extinction_level:
+            st.markdown(f"""
+            ##### 📈 '지구 평균 기온'과 '햇빛 차단율' 그래프를 읽어봅시다!
+            - **성층권 오염 및 암흑기 도달 ({max_soot:.1f}%):** 충돌 에너지가 임계점({EXTINCTION_THRESHOLD_MT:,.0f} Mt)을 넘으면서 무수한 파편이 성층권까지 도달했습니다. 햇빛 차단율이 최고 **{max_soot:.1f}%**까지 치솟아 전 지구가 밤처럼 어두워졌습니다.
+            - **충격 겨울의 절정 (최저 기온 {min_temp:.1f}°C):** 햇빛이 반사되면서 백악기 평균 기온(25°C)이 무려 **{min_temp:.1f}°C**까지 곤두박질쳤습니다. 교과서에 나오는 **'충격 겨울(Impact Winter)'** 현상이 완벽하게 시각화되었습니다.
+            """)
+        else:
+            st.markdown(f"""
+            ##### 📈 '지구 평균 기온'과 '햇빛 차단율' 그래프를 읽어봅시다!
+            - **대류권 내 먼지 침강 ({max_soot:.1f}% 미미한 차단):** 충돌 에너지가 대멸종 하한선에 미치지 못해, 먼지와 가스가 성층권을 뚫지 못하고 대류권 내에서 비에 씻겨 빠르게 내려앉았습니다. 햇빛 차단율은 잠시 상승했다가 곧바로 안정화됩니다.
+            - **안정적인 기온 유지 (최저 기온 {min_temp:.1f}°C):** 기온이 일시적으로 소폭 하강했으나 가혹한 한랭화로 이어지지 않아, 백악기 본래의 따뜻한 아열대 기후 환경을 안전하게 유지하고 있습니다.
+            """)
+        
+    with tab2:
+        if is_extinction_level:
+            st.markdown(f"""
+            ##### 📉 '식물 ➡️ 초식 ➡️ 육식' 개체수 곡선의 시간차(도미노) 현상 해석
+            - **식물의 급락과 연쇄 멸종:** 햇빛 가림막 때문에 식물 그래프가 수직 하강했으며, 이를 먹는 초식 공룡의 멸종 시점이 **{herb_extinct_time}** 부근에서 검출되었습니다.
+            - **최상위 포식자의 붕괴:** 연쇄 멸종 메커니즘에 의해 육식 공룡 역시 **{carn_extinct_time}** 시점에 절멸 위험군에 도달했습니다. 생태계의 기초(생산자)가 무너지면 생물종의 75% 이상이 파멸한다는 사실이 증명됩니다.
+            """)
+        else:
+            st.markdown(f"""
+            ##### 📉 '식물 ➡️ 초식 ➡️ 육식' 개체수 곡선의 시간차(도미노) 현상 해석
+            - **포식-피식 관계의 항상성 유지:** 초기 쓰나미({tsunami_val}m) 타격으로 인해 일시적인 개체수 동요가 그래프에 기록되었습니다.
+            - **생태계 복원력:** 하지만 먹이(식물)가 풍부하게 유지되므로 초식 공룡과 육식 공룡 모두 멸종 위험 시점({herb_extinct_time} / {carn_extinct_time})을 겪지 않고, 자연스러운 생태계 평형 상태(항상성)로 되돌아가는 양상이 뚜렷하게 관찰됩니다.
+            """)
+        
+    with tab3:
+        st.markdown(f"""
+        ##### 🎓 이 시뮬레이션이 주는 최종 과학적 메시지
+        - 지구 생물종의 75% 이상이 절멸하기 위해서는 단순히 충돌 지점 근처가 파괴되는 것을 넘어, **지구 전체 기후 순환계를 변조시키는 최소 에너지 임계점($10^{21}\sim10^{22} \text{{ J}}$)**을 넘어야 함을 본 데이터 분석을 통해 알 수 있습니다.
+        - **탐구 팁:** 직경 슬라이더를 **4.5km ~ 5.5km** 사이로 세밀하게 조절해 보세요. 에너지가 240만 메가톤 경계선을 넘나들며 그래프 추세선이 **'대멸종(Red)'**과 **'보존(Green)'**으로 다이내믹하게 바뀌는 임계점 분기 현상을 직접 포트폴리오에 인용할 수 있습니다.
+        """)
+else:
+    st.info("👈 왼쪽 사이드바에서 소행성 스펙을 조절하여 충돌 에너지가 240만 메가톤(대멸종 임계점)을 넘는지 확인해 보며 엔진을 가동해 보세요!")
